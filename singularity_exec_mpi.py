@@ -1,5 +1,4 @@
 import os
-import sys
 import shutil
 import argparse
 import subprocess
@@ -34,15 +33,17 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.')
-    parser.add_argument('-i', '--image', type=str,
+    parser.add_argument('-d', '--debug', action='store_true',
+                        help='use testing files and print the final command')
+    parser.add_argument('-i', '--image', type=str, required=True,
                         help='Singularity SIF image or Docker image (will be converted to SIF)')
-    parser.add_argument('-n', '--ncpus', type=str,
+    parser.add_argument('-n', '--ncpus', type=str, required=True,
                         help='number of parallel processes')
     parser.add_argument('-B', '--bind', type=str, metavar="PATH,...", default="", required=False,
                         help='comma separated list of paths to be bind to Singularity container')
     parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
-    parser.add_argument('prog', nargs="+", help='program to be run and all its arguments')
+    parser.add_argument('prog', nargs=argparse.REMAINDER, help='program to be run and all its arguments')
 
     # create the parser for the "prog" command
     # parser_prog = parser.add_subparsers().add_parser('prog', help='program to be run and all its arguments')
@@ -52,12 +53,19 @@ if __name__ == "__main__":
     # parser.print_usage()
     args = parser.parse_args()
 
-    # get program and its arguments, set absolute path
+    # get debug variable
+    debug = args.debug
+
+    # get program and its arguments
     prog_args = args.prog
-    prog_args[0] = os.path.abspath(prog_args[0])
 
     # get program and its arguments, set absolute path
-    image = os.path.abspath(args.image)
+    if os.path.isfile(args.image):
+        image = os.path.abspath(args.image)
+    elif args.image.startswith('docker://'):
+        image = args.image
+    else:
+        raise Exception("Invalid image: not a file nor docker hub link")
 
     print("Hostname: ", os.popen('hostname').read())
 
@@ -66,18 +74,21 @@ if __name__ == "__main__":
     ###################################################################################################################
 
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
-    orig_node_file = os.environ['PBS_NODEFILE']
-    node_file = os.path.join(script_dir, os.path.basename(orig_node_file))
-    shutil.copy(orig_node_file, node_file)
-    # TODO - testing case
-    # node_file = "hostfile_11184572.meta-pbs.metacentrum.cz"
+    if debug:
+        node_file = "testing_hostfile"
+    else:
+        orig_node_file = os.environ['PBS_NODEFILE']
+        node_file = os.path.join(script_dir, os.path.basename(orig_node_file))
+        shutil.copy(orig_node_file, node_file)
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
-    assert 'HOME' in os.environ
-    ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
-    # TODO - testing case
-    # ssh_known_hosts_file = 'known_hosts'
+    if debug:
+        ssh_known_hosts_file = 'testing_known_hosts'
+    else:
+        assert 'HOME' in os.environ
+        ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
+
     with open(ssh_known_hosts_file, 'r') as fp:
         ssh_known_hosts = fp.readlines()
 
@@ -104,7 +115,8 @@ if __name__ == "__main__":
     if not create_agent:
         create_agent = os.environ['SSH_AUTH_SOCK'] == ''
 
-    create_ssh_agent()
+    if create_agent:
+        create_ssh_agent()
     assert 'SSH_AUTH_SOCK' in os.environ
     assert os.environ['SSH_AUTH_SOCK'] != ""
 
@@ -165,4 +177,5 @@ if __name__ == "__main__":
     # Final call.
     ###################################################################################################################
     print(final_command)
-    os.system(final_command)
+    if not debug:
+        os.system(final_command)
