@@ -3,6 +3,7 @@ import shutil
 import argparse
 import subprocess
 
+from argparse import RawTextHelpFormatter
 
 def create_ssh_agent():
     p = subprocess.Popen('ssh-agent -s',
@@ -32,24 +33,30 @@ if __name__ == "__main__":
     script_dir = os.getcwd()
 
     parser = argparse.ArgumentParser(
-        description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.')
+        description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
+        formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-d', '--debug', action='store_true',
                         help='use testing files and print the final command')
     parser.add_argument('-i', '--image', type=str, required=True,
                         help='Singularity SIF image or Docker image (will be converted to SIF)')
-    parser.add_argument('-n', '--ncpus', type=str, required=True,
-                        help='number of parallel processes')
     parser.add_argument('-B', '--bind', type=str, metavar="PATH,...", default="", required=False,
                         help='comma separated list of paths to be bind to Singularity container')
     parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
-    parser.add_argument('prog', nargs=argparse.REMAINDER, help='program to be run and all its arguments')
+    parser.add_argument('prog', nargs=argparse.REMAINDER,
+                        help='''
+                        mpiexec arguments and the executable, follow mpiexec doc:
+                        "mpiexec args executable pgmargs [ : args executable pgmargs ... ]"
+                        
+                        still can use MPMD (Multiple Program Multiple Data applications):
+                        -n 4 program1 : -n 3 program2 : -n 2 program3 ...
+                        ''')
 
     # create the parser for the "prog" command
     # parser_prog = parser.add_subparsers().add_parser('prog', help='program to be run and all its arguments')
     # parser_prog.add_argument('args', nargs="+", help="all arguments passed to 'prog'")
 
-    # parser.print_help()
+    parser.print_help()
     # parser.print_usage()
     args = parser.parse_args()
 
@@ -57,7 +64,7 @@ if __name__ == "__main__":
     debug = args.debug
 
     # get program and its arguments
-    prog_args = args.prog
+    prog_args = args.prog[1:]
 
     # get program and its arguments, set absolute path
     if os.path.isfile(args.image):
@@ -168,7 +175,7 @@ if __name__ == "__main__":
     #     raise Exception("mpiexec path '" + mpiexec_path + "' not found in container!")
 
     # D] join mpiexec arguments
-    mpiexec_args = " ".join([mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path, '-n', args.ncpus])
+    mpiexec_args = " ".join([mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path])
 
     # F] join all the arguments into final singularity container command
     final_command = " ".join([sing_command, mpiexec_args, *prog_args])
