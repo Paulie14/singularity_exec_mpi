@@ -91,13 +91,20 @@ if __name__ == "__main__":
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
     if debug:
-        ssh_known_hosts_file = 'testing_known_hosts'
+        # ssh_known_hosts_file = 'testing_known_hosts'
+        ssh_known_hosts_file = 'xxx/.ssh/testing_known_hosts'
     else:
         assert 'HOME' in os.environ
         ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
 
-    with open(ssh_known_hosts_file, 'r') as fp:
-        ssh_known_hosts = fp.readlines()
+    ssh_known_hosts = []
+    if os.path.exists(ssh_known_hosts_file):
+        with open(ssh_known_hosts_file, 'r') as fp:
+            ssh_known_hosts = fp.readlines()
+    else:
+        dirname = os.path.dirname(ssh_known_hosts_file)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
 
     with open(node_file) as fp:
         node_names = fp.read().splitlines()
@@ -111,7 +118,7 @@ if __name__ == "__main__":
         ssh_keys = list((line for line in ssh_keys if not line.startswith('#')))
         for sk in ssh_keys:
             splits = sk.split(" ")
-            if splits[2] in ssh_known_hosts:
+            if not splits[2] in ssh_known_hosts:
                 ssh_known_hosts_to_append.append(sk)
 
     with open(ssh_known_hosts_file, 'a') as fp:
