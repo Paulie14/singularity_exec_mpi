@@ -1,11 +1,16 @@
 import os
+import sys
 import shutil
 import argparse
 import subprocess
 
 from argparse import RawTextHelpFormatter
 
+def mprint(*args, **kwargs):
+    print(*args, file=sys.stdout, flush=True, **kwargs)
+
 def create_ssh_agent():
+    mprint("creating ssh agent...")
     p = subprocess.Popen('ssh-agent -s',
                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          shell=True, universal_newlines=True)
@@ -24,12 +29,13 @@ def create_ssh_agent():
         if '=' in left:
             # get variable and value, put into os.environ
             varname, varvalue = left.split('=', 1)
-            print("setting variable from ssh-agent:", varname, "=", varvalue)
+            mprint("setting variable from ssh-agent:", varname, "=", varvalue)
             os.environ[varname] = varvalue
 
 
 if __name__ == "__main__":
 
+    mprint("================== singularity_exec_mpi.py START ==================")
     script_dir = os.getcwd()
 
     parser = argparse.ArgumentParser(
@@ -56,7 +62,7 @@ if __name__ == "__main__":
     # parser_prog = parser.add_subparsers().add_parser('prog', help='program to be run and all its arguments')
     # parser_prog.add_argument('args', nargs="+", help="all arguments passed to 'prog'")
 
-    parser.print_help()
+    # parser.print_help()
     # parser.print_usage()
     args = parser.parse_args()
 
@@ -74,7 +80,7 @@ if __name__ == "__main__":
     else:
         raise Exception("Invalid image: not a file nor docker hub link")
 
-    print("Hostname: ", os.popen('hostname').read())
+    mprint("Hostname: ", os.popen('hostname').read())
 
     ###################################################################################################################
     # Process node file and setup ssh access to given nodes.
@@ -84,9 +90,11 @@ if __name__ == "__main__":
     if debug:
         node_file = "testing_hostfile"
     else:
+        mprint("getting host file...")
         orig_node_file = os.environ['PBS_NODEFILE']
         node_file = os.path.join(script_dir, os.path.basename(orig_node_file))
         shutil.copy(orig_node_file, node_file)
+        # mprint(os.popen("ls -l").read())
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
@@ -96,18 +104,24 @@ if __name__ == "__main__":
     else:
         assert 'HOME' in os.environ
         ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
+    
+    mprint("host file name:", ssh_known_hosts_file)
 
     ssh_known_hosts = []
     if os.path.exists(ssh_known_hosts_file):
         with open(ssh_known_hosts_file, 'r') as fp:
             ssh_known_hosts = fp.readlines()
     else:
+        mprint("creating host file...")
         dirname = os.path.dirname(ssh_known_hosts_file)
         if not os.path.exists(dirname):
             os.makedirs(dirname)
 
+    mprint("reading host file...")
     with open(node_file) as fp:
         node_names = fp.read().splitlines()
+    
+    mprint("connecting nodes...")
     for node in node_names:
         # touch all the nodes, so that they are accessible also through container
         os.popen('ssh ' + node + ' exit')
@@ -121,10 +135,11 @@ if __name__ == "__main__":
             if not splits[2] in ssh_known_hosts:
                 ssh_known_hosts_to_append.append(sk)
 
+    mprint("finishing host file...")
     with open(ssh_known_hosts_file, 'a') as fp:
         fp.writelines(ssh_known_hosts_to_append)
 
-    # print(os.environ)
+    # mprint(os.environ)
     create_agent = 'SSH_AUTH_SOCK' not in os.environ
     if not create_agent:
         create_agent = os.environ['SSH_AUTH_SOCK'] == ''
@@ -137,6 +152,14 @@ if __name__ == "__main__":
     ###################################################################################################################
     # Create Singularity container commands.
     ###################################################################################################################
+
+    mprint("assembling final command...")
+
+    scratch_dir_path = None
+    if 'SCRATCHDIR' in os.environ:
+      scratch_dir_path = os.environ['SCRATCHDIR']
+      mprint("Using SCRATCHDIR:", scratch_dir_path)
+
     # A] process bindings, exclude ssh agent in launcher bindings
     bindings = "-B " + os.environ['SSH_AUTH_SOCK']
     # possibly add current dir to container bindings
@@ -146,13 +169,21 @@ if __name__ == "__main__":
         bindings = bindings + "," + args.bind
         bindings_in_launcher = "-B " + args.bind
 
+    if scratch_dir_path:
+      bindings = bindings + "," + scratch_dir_path
+      if args.bind == "":
+        bindings_in_launcher = "-B "+ scratch_dir_path
+      else:
+        bindings_in_launcher = bindings_in_launcher + "," + scratch_dir_path
+
     sing_command = ' '.join(['singularity', 'exec', bindings, image])
     sing_command_in_launcher = ' '.join(['singularity', 'exec', bindings_in_launcher, image])
 
-    print('sing_command:', sing_command)
-    print('sing_command_in_ssh:', sing_command_in_launcher)
+    mprint('sing_command:', sing_command)
+    mprint('sing_command_in_ssh:', sing_command_in_launcher)
 
     # B] prepare node launcher script
+    mprint("creating launcher script...")
     launcher_path = os.path.join(script_dir, "launcher.sh")
     launcher_lines = [
         '#!/bin/bash',
@@ -177,7 +208,7 @@ if __name__ == "__main__":
 
     # test_mpiexec = os.popen(sing_command + ' which ' + 'mpiexec').read()
     # # test_mpiexec = os.popen('singularity exec docker://flow123d/geomop:master_8d5574fc2 which flow123d').read()
-    # print("test_mpiexec: ", test_mpiexec)
+    # mprint("test_mpiexec: ", test_mpiexec)
     # if mpiexec_path == "":
     #     raise Exception("mpiexec path '" + mpiexec_path + "' not found in container!")
 
@@ -190,6 +221,19 @@ if __name__ == "__main__":
     ###################################################################################################################
     # Final call.
     ###################################################################################################################
-    print(final_command)
+    if scratch_dir_path:
+      # cp *.yaml $SCRATCHDIR/
+      # cp *.msh $SCRATCHDIR/
+      #mprint(os.popen("cp *.yaml $SCRATCHDIR/").read())
+      #mprint(os.popen("cp *.msh $SCRATCHDIR/").read())
+      mprint("Entering SCRATCHDIR:", scratch_dir_path)
+      os.chdir(scratch_dir_path)
+
+    mprint("current directory:", os.getcwd())
+    mprint(os.popen("ls -l").read())
+    mprint("final command:", final_command)
+    mprint("=================== singularity_exec_mpi.py END ===================")
     if not debug:
+        mprint("================== Program output START ==================")
         os.system(final_command)
+        mprint("=================== Program output END ===================")
