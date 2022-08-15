@@ -49,6 +49,11 @@ if __name__ == "__main__":
                         help='comma separated list of paths to be bind to Singularity container')
     parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
+    parser.add_argument('-s', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
+                        help='''
+                        if directory path, its content will be copied to SCRATCHDIR;
+                        if file path, each user defined path inside the file will be copied to SCRATCHDIR
+                        ''')
     parser.add_argument('prog', nargs=argparse.REMAINDER,
                         help='''
                         mpiexec arguments and the executable, follow mpiexec doc:
@@ -81,6 +86,7 @@ if __name__ == "__main__":
         raise Exception("Invalid image: not a file nor docker hub link")
 
     mprint("Hostname: ", os.popen('hostname').read())
+    # mprint("os.environ", os.environ)
 
     ###################################################################################################################
     # Process node file and setup ssh access to given nodes.
@@ -119,8 +125,10 @@ if __name__ == "__main__":
 
     mprint("reading host file...")
     with open(node_file) as fp:
-        node_names = fp.read().splitlines()
-    
+        node_names_read = fp.read().splitlines()
+        # remove duplicates
+        node_names = list(dict.fromkeys(node_names_read))
+
     mprint("connecting nodes...")
     for node in node_names:
         # touch all the nodes, so that they are accessible also through container
@@ -159,6 +167,28 @@ if __name__ == "__main__":
     if 'SCRATCHDIR' in os.environ:
       scratch_dir_path = os.environ['SCRATCHDIR']
       mprint("Using SCRATCHDIR:", scratch_dir_path)
+
+      mprint("copying to SCRATCHDIR on all nodes...")
+      username = os.environ['USER']
+      # get source files
+      source = None
+      if os.path.isdir(args.scratch_copy):
+        # source = args.scratch_copy + "/."
+        source = ' '.join(os.listdir(args.scratch_copy))
+      else:
+        with open(args.scratch_copy) as fp:
+          paths = fp.read().splitlines()
+          source = ' '.join(paths)
+
+      if source is None or source is []:
+        mprint(args.scratch_copy, "is empty")
+
+      for node in node_names:
+        destination = username + "@" + node + ':' + scratch_dir_path
+        command = ' '.join(['scp -r', source, destination])
+        # mprint(command)
+        os.popen(command)
+
 
     # A] process bindings, exclude ssh agent in launcher bindings
     bindings = "-B " + os.environ['SSH_AUTH_SOCK']
@@ -222,15 +252,11 @@ if __name__ == "__main__":
     # Final call.
     ###################################################################################################################
     if scratch_dir_path:
-      # cp *.yaml $SCRATCHDIR/
-      # cp *.msh $SCRATCHDIR/
-      #mprint(os.popen("cp *.yaml $SCRATCHDIR/").read())
-      #mprint(os.popen("cp *.msh $SCRATCHDIR/").read())
       mprint("Entering SCRATCHDIR:", scratch_dir_path)
       os.chdir(scratch_dir_path)
 
     mprint("current directory:", os.getcwd())
-    mprint(os.popen("ls -l").read())
+    # mprint(os.popen("ls -l").read())
     mprint("final command:", final_command)
     mprint("=================== singularity_exec_mpi.py END ===================")
     if not debug:
