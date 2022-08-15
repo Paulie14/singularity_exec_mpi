@@ -174,7 +174,8 @@ if __name__ == "__main__":
       source = None
       if os.path.isdir(args.scratch_copy):
         # source = args.scratch_copy + "/."
-        source = ' '.join(os.listdir(args.scratch_copy))
+        paths = [os.path.join(args.scratch_copy,fp) for fp in os.listdir(args.scratch_copy)]
+        source = ' '.join(paths)
       else:
         with open(args.scratch_copy) as fp:
           paths = fp.read().splitlines()
@@ -186,8 +187,8 @@ if __name__ == "__main__":
       for node in node_names:
         destination = username + "@" + node + ':' + scratch_dir_path
         command = ' '.join(['scp -r', source, destination])
-        # mprint(command)
-        os.popen(command)
+        mprint(node, ": ", command)
+        mprint(os.popen(command).read())
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
