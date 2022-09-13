@@ -83,7 +83,7 @@ if __name__ == "__main__":
     elif args.image.startswith('docker://'):
         image = args.image
     else:
-        raise Exception("Invalid image: not a file nor docker hub link")
+        raise Exception("Invalid image: not a file nor docker hub link: " + args.image)
 
     mprint("Hostname: ", os.popen('hostname').read())
     # mprint("os.environ", os.environ)

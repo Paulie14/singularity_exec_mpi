@@ -18,7 +18,7 @@ pwd
 # singularity_exec_mpi script path
 SING_SCRIPT="../singularity_exec_mpi.py"
 # singularity SIF image path (preferably create in advance)
-SING_FLOW="../flow123d_geomop-gnu:2.0.0.sif"
+SING_FLOW="$HOME/workspace/flow123d_images/flow123d_geomop-gnu:2.0.0.sif"
 # possibly set container mpiexec path
 # IMG_MPIEXEC="/usr/local/mpich_3.4.2/bin/mpiexec"
 # program and its arguments

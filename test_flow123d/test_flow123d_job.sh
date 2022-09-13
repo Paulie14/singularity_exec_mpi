@@ -20,8 +20,8 @@ pwd
 # singularity_exec_mpi script path
 SING_SCRIPT="../singularity_exec_mpi.py"
 # singularity SIF image path (preferably create in advance)
-SING_FLOW="../flow123d_geomop-gnu:2.0.0.sif"
-# SING_FLOW=flow123d_3.0.5_92f55e826.sif
+SING_FLOW="$HOME/workspace/flow123d_images/flow123d_geomop-gnu:2.0.0.sif"
+# SING_FLOW="$HOME/workspace/flow123d_images/flow123d_3.0.5_92f55e826.sif"
 
 # container mpiexec path (if not defined, default 'mpiexec' is used)
 IMG_MPIEXEC="/usr/local/mpich_3.4.2/bin/mpiexec"
@@ -29,9 +29,9 @@ IMG_MPIEXEC="/usr/local/mpich_3.4.2/bin/mpiexec"
 PROG="-n 4 flow123d 01_dirichlet.yaml -o output_flow"
 
 # directory with input files, all will be copied to $SCRATCHDIR
-SCRATCH_COPY="$PBS_O_WORKDIR/input"
+# SCRATCH_COPY="$PBS_O_WORKDIR/input"
 # file contains list of input files, all will be copied to $SCRATCHDIR
-# SCRATCH_COPY="$PBS_O_WORKDIR/scratch_files"
+SCRATCH_COPY="$PBS_O_WORKDIR/scratch_files"
 
 python3 $SING_SCRIPT -i $SING_FLOW -s $SCRATCH_COPY -m $IMG_MPIEXEC -- "$PROG"
 
