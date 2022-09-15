@@ -6,8 +6,12 @@ import subprocess
 
 from argparse import RawTextHelpFormatter
 
-def mprint(*args, **kwargs):
-    print(*args, file=sys.stdout, flush=True, **kwargs)
+def mprint(*margs, **mkwargs):
+    print(*margs, file=sys.stdout, flush=True, **mkwargs)
+
+def oscommand(command_string):
+    mprint(command_string)
+    mprint(os.popen(command_string).read())
 
 def create_ssh_agent():
     mprint("creating ssh agent...")
@@ -51,9 +55,9 @@ if __name__ == "__main__":
                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
     parser.add_argument('-s', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
                         help='''
-                        if directory path, its content will be copied to SCRATCHDIR;
-                        if file path, each user defined path inside the file will be copied to SCRATCHDIR
+                        directory path, its content will be copied to SCRATCHDIR;
                         ''')
+                        # if file path, each user defined path inside the file will be copied to SCRATCHDIR
     parser.add_argument('prog', nargs=argparse.REMAINDER,
                         help='''
                         mpiexec arguments and the executable, follow mpiexec doc:
@@ -165,30 +169,46 @@ if __name__ == "__main__":
 
     scratch_dir_path = None
     if 'SCRATCHDIR' in os.environ:
-      scratch_dir_path = os.environ['SCRATCHDIR']
-      mprint("Using SCRATCHDIR:", scratch_dir_path)
+        scratch_dir_path = os.environ['SCRATCHDIR']
+        mprint("Using SCRATCHDIR:", scratch_dir_path)
 
-      mprint("copying to SCRATCHDIR on all nodes...")
-      username = os.environ['USER']
-      # get source files
-      source = None
-      if os.path.isdir(args.scratch_copy):
-        # source = args.scratch_copy + "/."
-        paths = [os.path.join(args.scratch_copy,fp) for fp in os.listdir(args.scratch_copy)]
-        source = ' '.join(paths)
-      else:
-        with open(args.scratch_copy) as fp:
-          paths = fp.read().splitlines()
-          source = ' '.join(paths)
+        mprint("copying to SCRATCHDIR on all nodes...")
+        username = os.environ['USER']
+        # get source files
+        source = None
+        if os.path.isdir(args.scratch_copy):
+            # source = args.scratch_copy + "/."
+            # paths = [os.path.join(args.scratch_copy,fp) for fp in os.listdir(args.scratch_copy)]
+            # source = ' '.join(paths)
+            source = args.scratch_copy
+        else:
+            raise Exception("--scratch_copy argument is not a valid directory: " + args.scratch_copy)
+            # with open(args.scratch_copy) as fp:
+            #   paths = fp.read().splitlines()
+            #   source = ' '.join(paths)
 
-      if source is None or source is []:
-        mprint(args.scratch_copy, "is empty")
+        if source is None or source is []:
+            mprint(args.scratch_copy, "is empty")
 
-      for node in node_names:
-        destination = username + "@" + node + ':' + scratch_dir_path
-        command = ' '.join(['scp -r', source, destination])
-        mprint(node, ": ", command)
-        mprint(os.popen(command).read())
+        # create tar
+        source_tar_filename = 'scratch.tar'
+        source_tar_filepath = os.path.join(script_dir, source_tar_filename)
+        command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', script_dir])
+        oscommand(command)
+
+        for node in node_names:
+            destination_name = username + "@" + node
+            destination_path = destination_name + ':' + scratch_dir_path
+            command = ' '.join(['scp', source_tar_filepath, destination_path])
+            oscommand(command)
+
+            #command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
+            command = ' '.join(['ssh', destination_name, '"cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename,
+                                '&&', 'rm ', source_tar_filename, '"'])
+            oscommand(command)
+
+        # remove the scratch tar
+        oscommand(' '.join(['rm', source_tar_filename]))
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
@@ -228,7 +248,7 @@ if __name__ == "__main__":
     ]
     with open(launcher_path, 'w') as f:
         f.write('\n'.join(launcher_lines))
-    os.popen('chmod +x ' + launcher_path)
+    oscommand('chmod +x ' + launcher_path)
 
     # C] set mpiexec path inside the container
     # if container path to mpiexec is provided, use it
@@ -258,7 +278,7 @@ if __name__ == "__main__":
 
     mprint("current directory:", os.getcwd())
     # mprint(os.popen("ls -l").read())
-    mprint("final command:", final_command)
+    mprint("final command:")
     mprint("=================== singularity_exec_mpi.py END ===================")
     if not debug:
         mprint("================== Program output START ==================")

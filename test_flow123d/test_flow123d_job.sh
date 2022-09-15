@@ -29,9 +29,10 @@ IMG_MPIEXEC="/usr/local/mpich_3.4.2/bin/mpiexec"
 PROG="-n 4 flow123d 01_dirichlet.yaml -o output_flow"
 
 # directory with input files, all will be copied to $SCRATCHDIR
-# SCRATCH_COPY="$PBS_O_WORKDIR/input"
+SCRATCH_COPY="$PBS_O_WORKDIR/input"
 # file contains list of input files, all will be copied to $SCRATCHDIR
-SCRATCH_COPY="$PBS_O_WORKDIR/scratch_files"
+# not enabled now
+# SCRATCH_COPY="$PBS_O_WORKDIR/scratch_files"
 
 python3 $SING_SCRIPT -i $SING_FLOW -s $SCRATCH_COPY -m $IMG_MPIEXEC -- "$PROG"
 
